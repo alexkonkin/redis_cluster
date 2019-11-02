@@ -1,0 +1,13 @@
+[Unit]
+Description=Redis In-Memory Data Store
+After=network.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/local/bin/redis-server /vagrant/server1/c_slave.conf
+ExecStop=/usr/local/bin/redis-cli -h 172.16.94.11 -p 6381 shutdown
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
