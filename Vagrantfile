@@ -24,7 +24,7 @@ $install_keepalived_haproxy = <<-SCRIPT
   echo $nod_ip
   echo $is_first_node
   sudo apt install keepalived haproxy mc -y
-  echo -e "192.168.1.11       srv1\n192.168.1.12       srv2\n172.16.94.11       mysql-node1\n172.16.94.12       mysql-node2\n172.16.94.13       mysql-node3" >> /etc/hosts
+  echo -e "192.168.1.11       srv1\n192.168.1.12       srv2\n172.16.94.11       redis-node1\n172.16.94.12       redis-node2\n172.16.94.13       redis-node3" >> /etc/hosts
 
 cat > /etc/haproxy/haproxy.cfg << "END"
 global
@@ -65,20 +65,23 @@ backend webservers
     server srv1 192.168.1.11:80 check cookie srv1
     server srv2 192.168.1.12:80 check cookie srv2
 
-frontend sql
-    bind 192.168.1.100:3306
-    mode tcp
-    option tcplog
-    default_backend dbservers
 
-backend dbservers
-    mode tcp
-    balance leastconn
-    option tcpka
-    option mysql-check user haproxy_user post-41
-    server mysql-node1 172.16.94.11:3306 check weight 1
-    server mysql-node2 172.16.94.12:3306 check weight 1
-    server mysql-node3 172.16.94.13:3306 check weight 1
+frontend ft_redis
+    bind 192.168.1.100:6379 name redis
+    default_backend bk_redis
+
+backend bk_redis
+    balance roundrobin
+    option tcp-check
+    tcp-check connect
+    tcp-check send PING\r\n
+    tcp-check expect string +PONG
+    tcp-check send QUIT\r\n
+    tcp-check expect string +OK
+    server redis-node1 172.16.94.11:6379 check inter 1s
+    server redis-node2 172.16.94.12:6380 check inter 1s
+    server redis-node3 172.16.94.13:6381 check inter 1s
+
 END
 
 cat > /etc/keepalived/keepalived.conf << "END"
