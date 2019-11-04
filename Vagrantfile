@@ -11,6 +11,26 @@ $test = <<-SCRIPT
 
 SCRIPT
 
+
+$build_and_install_redis_binary = <<-SCRIPT
+  nod_nam=$1
+  nod_ip=$2
+  is_first_node=$3
+
+  echo $nod_nam
+  echo $nod_ip
+  echo $is_first_node
+
+   echo "---===< Build and install redis binary script has started ...>===---"
+   echo "apt: update and upgrade packkages"
+   apt-get update && sudo apt-get upgrade
+   echo "apt: install packages that are neccesary to compile redis"
+   apt install make gcc libc6-dev tcl mc -y
+
+   echo "download, build and install redis binaries"
+   wget http://download.redis.io/releases/redis-4.0.14.tar.gz && tar -xvzf redis-4.0.14.tar.gz && cd redis-4.0.14 && make install && make test
+SCRIPT
+
 $install_keepalived_haproxy = <<-SCRIPT
   state=$1
   priority=$2
@@ -20,6 +40,7 @@ $install_keepalived_haproxy = <<-SCRIPT
   echo $nod_nam
   echo $nod_ip
   echo $is_first_node
+  echo "---===< Install and configure haproxy and keepalived >===---"
   sudo apt install keepalived haproxy mc -y
   echo -e "192.168.1.11       srv1\n192.168.1.12       srv2\n172.16.94.11       redis-node1\n172.16.94.12       redis-node2\n172.16.94.13       redis-node3" >> /etc/hosts
 
@@ -71,9 +92,9 @@ backend bk_redis
     balance roundrobin
     option tcp-check
     tcp-check connect
-    tcp-check send PING\r\n
+    tcp-check send PING\\r\\n
     tcp-check expect string +PONG
-    tcp-check send QUIT\r\n
+    tcp-check send QUIT\\r\\n
     tcp-check expect string +OK
     server redis-node1 172.16.94.11:6379 check inter 1s
     server redis-node2 172.16.94.12:6380 check inter 1s
@@ -125,18 +146,10 @@ $install_redis_cluster = <<-SCRIPT
    echo "updating hosts file"
    echo -e "192.168.1.11       srv1\n192.168.1.12       srv2\n172.16.94.11       redis-node1\n172.16.94.12       redis-node2\n172.16.94.13       redis-node3" >> /etc/hosts
 
-   "apt: update and upgrade packkages"
-   apt-get update && sudo apt-get upgrade
-   "apt: install packages that are neccesary to compile redis"
-   apt install make gcc libc6-dev tcl mc -y
-   "creating directory structure and log files ..."
+   echo "creating directory structure and log files ..."
    mkdir -pv /var/lib/redis/
    touch /var/log/redis_master.log
    touch /var/log/redis_slave.log
-
-   "download, build and install redis binaries"
-   wget http://download.redis.io/releases/redis-4.0.14.tar.gz && tar -xvzf redis-4.0.14.tar.gz && cd redis-4.0.14 && make install && make test
-
 
    case $nod_nam in
      redis-node2)
@@ -187,9 +200,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     srv1.vm.box = "bento/ubuntu-18.04"
     srv1.vm.hostname = "srv1"
     srv1.vm.network :private_network, ip: "192.168.1.11"
-    config.vm.provision "shell" do |script|
-       script.inline = $install_keepalived_haproxy
-       script.args = ["MASTER","101","192.168.1.11","192.168.1.12"]
+    config.vm.provision "script1", type: "shell" do |shell|
+       shell.inline = $install_keepalived_haproxy
+       shell.args = ["MASTER","101","192.168.1.11","192.168.1.12"]
+    end
+    config.vm.provision "script2", type: "shell", run: "never" do |shell|
+       shell.inline = $build_and_install_redis_binary
     end
   end
 
@@ -207,9 +223,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     redis2.vm.box = "bento/ubuntu-18.04"
     redis2.vm.hostname = "redis-node2"
     redis2.vm.network :private_network, ip: "172.16.94.12"
-    config.vm.provision "shell" do |script|
-       script.inline = $install_redis_cluster
-       script.args = ["redis-node2","172.16.94.12","false"]
+    config.vm.provision "script1", type: "shell" do |shell|
+       shell.inline = $build_and_install_redis_binary
+    end
+    config.vm.provision "script2", type: "shell" do |shell|
+       shell.inline = $install_redis_cluster
+       shell.args = ["redis-node2","172.16.94.12","false"]
     end
   end
 
@@ -217,10 +236,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     redis3.vm.box = "bento/ubuntu-18.04"
     redis3.vm.hostname = "redis-node3"
     redis3.vm.network :private_network, ip: "172.16.94.13"
-    #redis3.vm.provision "shell", path: 'provisioners/install_k8s.sh', privileged: false
-    config.vm.provision "shell" do |script|
-       script.inline = $install_redis_cluster
-       script.args = ["redis-node3","172.16.94.13","false"]
+    config.vm.provision "script1", type: "shell" do |shell|
+       shell.inline = $build_and_install_redis_binary
+    end
+    config.vm.provision "script2", type: "shell" do |shell|
+       shell.inline = $install_redis_cluster
+       shell.args = ["redis-node3","172.16.94.13","false"]
     end
    end
 
@@ -228,9 +249,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     redis1.vm.box = "bento/ubuntu-18.04"
     redis1.vm.hostname = "redis-node1"
     redis1.vm.network :private_network, ip: "172.16.94.11"
-    config.vm.provision "shell" do |script|
-       script.inline = $install_redis_cluster
-       script.args = ["redis-node1","172.16.94.11","true"]
+    config.vm.provision "script1", type: "shell" do |shell|
+       shell.inline = $build_and_install_redis_binary
+    end
+    config.vm.provision "script2", type: "shell" do |shell|
+       shell.inline = $install_redis_cluster
+       shell.args = ["redis-node1","172.16.94.11","true"]
     end
   end
 
